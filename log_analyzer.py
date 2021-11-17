@@ -5,6 +5,7 @@ import time
 import threading
 import curses
 import argparse
+import os
 from collections import defaultdict, deque
 from datetime import datetime
 
@@ -29,20 +30,46 @@ class LogParser:
                         'level': level, 'service': 'unknown', 'message': line.strip()}
         return None
 
+class PerformanceStats:
+    def __init__(self):
+        self.log_count = 0
+        self.error_count = 0
+        self.warning_count = 0
+        self.level_stats = defaultdict(int)
+        self.service_stats = defaultdict(int)
+        self.recent_logs = deque(maxlen=1000)
+        self.start_time = time.time()
+
+    def update(self, entry):
+        self.log_count += 1
+        self.recent_logs.append(entry)
+        level = entry.get('level', 'INFO').upper()
+        service = entry.get('service', 'unknown')
+        self.level_stats[level] += 1
+        self.service_stats[service] += 1
+        if level in ['ERROR','CRITICAL','ALERT','EMERGENCY']:
+            self.error_count += 1
+        elif level == 'WARNING':
+            self.warning_count += 1
+
+    # TODO: add throughput calculation
+    def get_error_rate(self):
+        if self.log_count == 0:
+            return 0
+        return (self.error_count / self.log_count) * 100
+
 def main():
     ap = argparse.ArgumentParser(description='Real-time Log Analyzer')
-    ap.add_argument('log_file', help='Path to log file')
+    ap.add_argument('log_file')
     ap.add_argument('-t', '--type', choices=['syslog','apache','nginx','custom'], default='syslog')
-    ap.add_argument('--severity', choices=['DEBUG','INFO','WARNING','ERROR','CRITICAL'], default='DEBUG')
+    ap.add_argument('--severity', default='DEBUG')
     args = ap.parse_args()
 
-    import os
     if not os.path.exists(args.log_file):
-        print(f"Error: '{args.log_file}' not found")
-        sys.exit(1)
+        print(f"Error: '{args.log_file}' not found"); sys.exit(1)
 
-    print(f"Monitoring {args.log_file} [{args.type}] min severity={args.severity}")
     parser = LogParser()
+    stats = PerformanceStats()
     with open(args.log_file, 'r') as f:
         f.seek(0, 2)
         while True:
@@ -50,7 +77,8 @@ def main():
             if line:
                 parsed = parser.parse_line(line, args.type)
                 if parsed:
-                    print(f"[{parsed.get('level','?'):8}] {parsed.get('service','?'):12} {parsed.get('message','')}")
+                    stats.update(parsed)
+                    print(f"[{parsed.get('level','?'):8}] {parsed.get('message','')}")
             else:
                 time.sleep(0.1)
 
