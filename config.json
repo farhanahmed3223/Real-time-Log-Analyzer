@@ -4,5 +4,7 @@
     "refresh_rate": 100,
     "max_display_logs": 1000,
     "color_scheme": "default",
-    "custom_patterns": {}
+    "custom_patterns": {
+        "myapp": "(?P<timestamp>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}) \\[(?P<level>\\w+)\\] (?P<service>\\w+) - (?P<message>.*)"
+    }
 }
